@@ -12,6 +12,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.Scanner;
+import com.jcraft.jsch.ChannelSftp;
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
+import com.jcraft.jsch.SftpException;
+
+import java.io.*;
+
 /**/
 @SuppressWarnings("unused")
 
@@ -19,15 +27,27 @@ public class Tester {
 	static Random rand = new Random();
 	public static final double LEARNING_RATE = .01;
 	public static final double MOMENTUM = .25;
-	public static final double ALLOWABLE_ERROR= 2;
+	public static final double ALLOWABLE_ERROR= 100;
 	public static double totalGlobalError;
 	/*created to keep track of the main neural network's wallets which I use to see if the program has become profitable*/
 	static ArrayList<Wallet> wallets;
 	/*This is a variable created to see what the value of the wallets would be if no action was taken used to see profitability in output files*/
 	private static ArrayList<Wallet> noactwallets;
+	private static Session session;
+	private static ChannelSftp sftpChannel;
 	/* main methods initializes all the separate threads threads*/
-	public static void main(String[] args) throws ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, IOException{
+	public static void main(String[] args) throws ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, IOException, SftpException, JSchException{
 		/* This thread creates a thread for each market to keep it updated with the latest data*/
+		JSch jsch = new JSch();
+		session = jsch.getSession("LegendForHire", "71.71.87.235");
+		session.setPassword("tFA45w&5f");
+		session.setConfig("StrictHostKeyChecking", "no");
+        System.out.println("Establishing Connection...");
+        session.connect();
+            System.out.println("Connection established.");
+        System.out.println("Crating SFTP Channel.");
+        sftpChannel = (ChannelSftp) session.openChannel("sftp");
+        sftpChannel.connect();
 		long t1 = System.currentTimeMillis();
 		Market[] markets = marketCreator();
 		Thread thread1 = new Thread() {
@@ -53,6 +73,9 @@ public class Tester {
 					e.printStackTrace();
 				} catch (InterruptedException e) {
 					e.printStackTrace();
+				} catch (SftpException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
 			}
 		};		
@@ -76,7 +99,7 @@ public class Tester {
 				try {
 					main(markets);
 				} catch (ClassNotFoundException | NoSuchMethodException | SecurityException | IllegalAccessException
-						| IllegalArgumentException | InvocationTargetException | IOException e) {
+						| IllegalArgumentException | InvocationTargetException | IOException | SftpException e) {
 					run();
 				}
 			}
@@ -86,19 +109,19 @@ public class Tester {
 		thread3.start();
 	}
 	// This is the method where the nEuralNetworks learn.
-	private static void RunNetworks(NeuralNetwork[] nns, Market[] markets) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, InterruptedException {		
+	private static void RunNetworks(NeuralNetwork[] nns, Market[] markets) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, InterruptedException, SftpException {		
 			int i = 0;
 			
 			while (true){
 				for (NeuralNetwork nn : nns){
 					nn.restartWallets();
 				}
-			totalGlobalError = ALLOWABLE_ERROR +1;
+			totalGlobalError = ALLOWABLE_ERROR/(Math.log(i)+1) +1;
 			System.out.println("Iteration" + i);
 			// see method description
 			Neuraltracker(nns);	
 			// this is where the back propagation learning step for the neural networks run. currently I have them set to run for one minute before evaluating
-			while(totalGlobalError > ALLOWABLE_ERROR){
+			while(totalGlobalError > ALLOWABLE_ERROR/(Math.log(i)+1)){
 				//set old values for back propagation step
 				for(Market m: markets){
 					m.setOld();
@@ -159,18 +182,26 @@ public class Tester {
 		
 	}
 	//saves the state of the neural networks.
-	private static void save(NeuralNetwork[] nns,Market[] markets,double noact) throws IOException {
+	private static void save(NeuralNetwork[] nns,Market[] markets,double noact) throws IOException, SftpException {
 		long t = System.currentTimeMillis();
 		File out;
 		File recent;
 		PrintWriter fout;
 		PrintWriter frecent;
 //		try {
-			out = new File("D:/NeuralNetworks/Generation" + t + ".txt");
-			recent = new File("D:/NeuralNetworks/MostRecent.txt");
+			out = new File("Generation.txt");
+			recent = new File("MostRecent.txt");
 			fout = new PrintWriter(out);
 			frecent = new PrintWriter(recent);
 			frecent.println(t);
+			frecent.close();
+			try{
+				sftpChannel.put("MostRecent.txt","MostRecent.txt");
+			}
+			catch(Exception e){
+		
+			}
+			
 //		}
 //		catch (Exception e) {
 //			try {	
@@ -270,7 +301,12 @@ public class Tester {
 			fout.println("; Created (Genarations Ago):" + nn.getAge() + "; Made (USD):" + ((nn.getFitness()-noact)*markets[i].getData(3))+ "; Global Error :" + nn.getGlobalError());
 		}
 		fout.close();
-		frecent.close();		
+		try{
+		sftpChannel.put("Generation.txt","Generation"+ t +".txt");
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
 	}
 	//this is where the new populations are created.
 	private static NeuralNetwork[] evolve(NeuralNetwork[] nns,Market[] markets) throws IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
@@ -1332,66 +1368,29 @@ public class Tester {
 		return layers;
 		}
 	//creates the basic networks or loads old ones onto the creator structure.
-	public static NeuralNetwork[] CreateNetworks(int i, Market[] markets) throws IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException{
-//		NeuralNetwork nn1;
-//		NeuralNetwork nn2;
-//		Layer in = new Layer(true,false);
-//		Layer out = new Layer(false, true);
-//		Market grow = new Market("Test");
-//		Method m;
-//		m = new OutputMethods().getClass().getMethods()[0];
-//		OutputNeuron n = new OutputNeuron(m, 1, grow, 5);
-//		Method fake = new OutputMethods().getClass().getMethods()[2];
-//		InputNeuron n2 = new InputNeuron(fake);
-//		Gene g = new Gene(n, 0.5);
-//		n2.AddGenes(g);
-//		g.setInput(n2);
-//		n.input.add(g);
-//		in.addInputNeuron(n2);
-//		out.addOutputNeuron(n);
-//		nn1 = new NeuralNetwork(in,out, null);
-//		Layer in2 = new Layer(true,false);
-//		Layer out2 = new Layer(false, true);
-//		Market fall = new Market("Test2");
-//		OutputNeuron n3 = new OutputNeuron(m, 1, fall, 5);
-//		Gene g2 = new Gene(n3, 0.5);
-//		InputNeuron n4 = new InputNeuron(fake);
-//		n4.AddGenes(g2);
-//		g2.setInputI(n4);
-//		n3.input.add(g2);
-//		in2.addInputNeuron(n4);
-//		out2.addOutputNeuron(n3);
-//		nn2 = new NeuralNetwork(in2,out2,null);
-//		NeuralNetwork[] NetworkList = {nn1, nn2};
+	public static NeuralNetwork[] CreateNetworks(int i, Market[] markets) throws IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, SftpException, JSchException{
 			//if there are no load files , it creates one random gene for each neural network.
 			NeuralNetwork[] NetworkList = new NeuralNetwork[i];
-			File[] files;
-			try {
-			files = new File("D:/NeuralNetworks/").listFiles();
-			}
-			catch (Exception e) {
-				try {
-					files = new File("H:/NeuralNetworks/").listFiles();
-					}
-					catch (Exception e2) {
-						files = new File("/Volumes/Untitled/NeuralNetworks/").listFiles();
-					}
-				
-			}
-			
-			
-			for (int j = 0; j<i;j++){
-				Layer[] layers = creator(markets);
-				Layer outputlayercopy = layers[1];
-				Layer inputlayercopy = layers[0];
-				outputlayercopy.setNumber(2);
-				inputlayercopy.setNumber(1);
-				if(files != null) {
-				if(files.length > 0){	
+			Layer[] layers = creator(markets);
+			Layer outputlayercopy = layers[1];
+			Layer inputlayercopy = layers[0];
+			outputlayercopy.setNumber(2);
+			inputlayercopy.setNumber(1);
+			for (int j = 0; j<i;j++){			
 				NetworkList[j] = new NeuralNetwork(inputlayercopy, outputlayercopy, markets);
-				
+				for (OutputNeuron n : outputlayercopy.getONeurons()){
+					n.updateWallets(NetworkList[j].getWallets());
 				}
-				else{
+			}
+			try{
+				File file = new File("Generation.txt");					
+				
+				load(NetworkList, file);
+			
+			}
+			catch(Exception e){
+			e.printStackTrace();
+			for (int j = 0; j<i;j++){			
 					int inputrand = 0;
 					if(inputlayercopy.getINeurons().size()-1 >0) inputrand = rand.nextInt(inputlayercopy.getINeurons().size()-1);
 					int outputrand = 0;
@@ -1400,66 +1399,16 @@ public class Tester {
 					inputlayercopy.getINeurons().get(inputrand).AddGenes(starter);
 					starter.setInput(inputlayercopy.getINeurons().get(inputrand));
 					NetworkList[j] = new NeuralNetwork(inputlayercopy, outputlayercopy, markets);
-					}
-				}
-				else{
-				int inputrand = 0;
-				if(inputlayercopy.getINeurons().size()-1 >0) inputrand = rand.nextInt(inputlayercopy.getINeurons().size()-1);
-				int outputrand = 0;
-				if(outputlayercopy.getONeurons().size()-1 >0) outputrand = rand.nextInt(outputlayercopy.getONeurons().size()-1);
-				Gene starter = new Gene(outputlayercopy.getONeurons().get(outputrand), (Math.random()*2)-1);
-				inputlayercopy.getINeurons().get(inputrand).AddGenes(starter);
-				starter.setInput(inputlayercopy.getINeurons().get(inputrand));
-				NetworkList[j] = new NeuralNetwork(inputlayercopy, outputlayercopy, markets);
-				}
-				
-				
-				for (OutputNeuron n : outputlayercopy.getONeurons()){
-					n.updateWallets(NetworkList[j].getWallets());
-				}
+					
+					}									
 			}
-			if(files != null){
-			if(files.length > 0){
-				load(NetworkList);
-			}
-			}
-			return NetworkList;
-			
+			return NetworkList;		
 		}
 	@SuppressWarnings("resource")
 	//loads the most recent save file.
-	private static void load(NeuralNetwork[] networkList) throws IOException {
+	private static void load(NeuralNetwork[] networkList, File f) throws IOException, SftpException, JSchException {
 		//loads this to find the actual most recent network. may be obsolete.
-		File select;
-		File f;
-		Scanner fin;
-		try{
-		select = new File("D:/NeuralNetworks/MostRecent.txt");
-		Scanner selectin = new Scanner(select);
-		long selector = Long.parseLong(selectin.nextLine());
-		//loads the file of the latest neural network
-		f = new File("D:/NeuralNetworks/Generation" + selector + ".txt");
-		fin = new Scanner(f);
-		}
-		catch (Exception e){
-			try {
-				select = new File("H:/NeuralNetworks/MostRecent.txt");
-				Scanner selectin = new Scanner(select);
-				long selector = Long.parseLong(selectin.nextLine());
-				//loads the file of the latest neural network
-				f = new File("H:/NeuralNetworks/Generation" + selector + ".txt");
-				fin = new Scanner(f);
-			}
-			catch (Exception e2) {
-				select = new File("/Volumes/Untitled/NeuralNetworks/MostRecent.txt");
-				Scanner selectin = new Scanner(select);
-				long selector = Long.parseLong(selectin.nextLine());
-				//loads the file of the latest neural network
-				f = new File("/Volumes/Untitled/NeuralNetworks/Generation" + selector + ".txt");
-				fin = new Scanner(f);
-			}
-		}
-
+		Scanner fin = new Scanner(f);	
 		for (NeuralNetwork nn : networkList){
 			
 			String[] netData = fin.nextLine().split(";");
@@ -1632,7 +1581,7 @@ public class Tester {
 		
 	}
 	//runs the current best neural network constantly,  to see how the neuralnetwork is currently running.
-	public static void main(Market[] markets) throws IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+	public static void main(Market[] markets) throws IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, SftpException {
 		Layer[] l = creator(markets);
 		NeuralNetwork noact = new NeuralNetwork(l[0],l[1], markets);
 		for(OutputNeuron n : noact.getLayers().get(noact.getLayers().size()-1).getONeurons()){
@@ -1641,8 +1590,7 @@ public class Tester {
 		while(true){
 		l = creator(markets);
 		NeuralNetwork nn = new NeuralNetwork(l[0],l[1], markets);		
-		File[] fs = new File("D:/NeuralNetworks").listFiles();
-		File f = fs[fs.length - 3];
+		File f = new File("Generation.txt");
 		@SuppressWarnings("resource")
 		Scanner fin = new Scanner(f);
 		String[] netData = fin.nextLine().split(";");
@@ -1771,12 +1719,19 @@ public class Tester {
 			}
 			t2 = System.currentTimeMillis();
 			}
-			File f2 = new File("D:\\NeuralNetworks\\profit.txt");
+			File f2 = new File("profit.txt");
 			PrintWriter fout = new PrintWriter(f2);
 			int i = -1;
 			while(!markets[++i].getMarketName().equals("USDT-BTC"));
 			fout.println((nn.getFitness()-noact.getFitness())*markets[i].getData(3));
 			fout.close();
+			try{
+				sftpChannel.put("profit.txt","profit.txt");
+		 	}
+			catch(Exception e){
+				
+			}
+			
 		}
 		
 		
