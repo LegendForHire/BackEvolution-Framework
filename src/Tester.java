@@ -27,7 +27,7 @@ public class Tester {
 	static Random rand = new Random();
 	public static final double LEARNING_RATE = .01;
 	public static final double MOMENTUM = .25;
-	public static final double ALLOWABLE_ERROR= 100;
+	public static final double ALLOWABLE_ERROR= 250;
 	public static double totalGlobalError;
 	/*created to keep track of the main neural network's wallets which I use to see if the program has become profitable*/
 	static ArrayList<Wallet> wallets;
@@ -110,18 +110,18 @@ public class Tester {
 	}
 	// This is the method where the nEuralNetworks learn.
 	private static void RunNetworks(NeuralNetwork[] nns, Market[] markets) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, InterruptedException, SftpException {		
-			int i = 0;
+			int i = 1;
 			
 			while (true){
 				for (NeuralNetwork nn : nns){
 					nn.restartWallets();
 				}
-			totalGlobalError = ALLOWABLE_ERROR/(Math.log(i)+1) +1;
+			totalGlobalError = ALLOWABLE_ERROR/(Math.log(i)*3+1) +1;
 			System.out.println("Iteration" + i);
 			// see method description
 			Neuraltracker(nns);	
 			// this is where the back propagation learning step for the neural networks run. currently I have them set to run for one minute before evaluating
-			while(totalGlobalError > ALLOWABLE_ERROR/(Math.log(i)+1)){
+			while(totalGlobalError > ALLOWABLE_ERROR/(Math.log(i)*3+1)){
 				//set old values for back propagation step
 				for(Market m: markets){
 					m.setOld();
@@ -1371,26 +1371,20 @@ public class Tester {
 	public static NeuralNetwork[] CreateNetworks(int i, Market[] markets) throws IOException, ClassNotFoundException, NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, SftpException, JSchException{
 			//if there are no load files , it creates one random gene for each neural network.
 			NeuralNetwork[] NetworkList = new NeuralNetwork[i];
-			Layer[] layers = creator(markets);
-			Layer outputlayercopy = layers[1];
-			Layer inputlayercopy = layers[0];
-			outputlayercopy.setNumber(2);
-			inputlayercopy.setNumber(1);
-			for (int j = 0; j<i;j++){			
-				NetworkList[j] = new NeuralNetwork(inputlayercopy, outputlayercopy, markets);
-				for (OutputNeuron n : outputlayercopy.getONeurons()){
-					n.updateWallets(NetworkList[j].getWallets());
-				}
-			}
+			
 			try{
 				File file = new File("Generation.txt");					
-				
 				load(NetworkList, file);
 			
 			}
 			catch(Exception e){
 			e.printStackTrace();
-			for (int j = 0; j<i;j++){			
+			for (int j = 0; j<i;j++){		
+					Layer[] layers = creator(markets);
+					Layer outputlayercopy = layers[1];
+					Layer inputlayercopy = layers[0];
+					outputlayercopy.setNumber(2);
+					inputlayercopy.setNumber(1);
 					int inputrand = 0;
 					if(inputlayercopy.getINeurons().size()-1 >0) inputrand = rand.nextInt(inputlayercopy.getINeurons().size()-1);
 					int outputrand = 0;
@@ -1398,8 +1392,11 @@ public class Tester {
 					Gene starter = new Gene(outputlayercopy.getONeurons().get(outputrand), (Math.random()*2)-1);
 					inputlayercopy.getINeurons().get(inputrand).AddGenes(starter);
 					starter.setInput(inputlayercopy.getINeurons().get(inputrand));
+					NetworkList[j] = new NeuralNetwork(inputlayercopy, outputlayercopy, markets);			
 					NetworkList[j] = new NeuralNetwork(inputlayercopy, outputlayercopy, markets);
-					
+					for (OutputNeuron n : outputlayercopy.getONeurons()){
+							n.updateWallets(NetworkList[j].getWallets());
+					}
 					}									
 			}
 			return NetworkList;		
