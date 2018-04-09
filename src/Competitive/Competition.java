@@ -3,13 +3,15 @@ package Competitive;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 
+import Backpropagate.Backpropagate;
 import General.NeuralNetManager;
 import General.NeuralNetwork;
 import General.Singleton;
 
 public class Competition {
 	@SuppressWarnings({"unchecked","deprecation"})
-	public static void runner(Singleton s) throws InstantiationException, IllegalAccessException, ClassNotFoundException{		
+	public static void backpropagationRunner(Singleton s1) throws InstantiationException, IllegalAccessException, ClassNotFoundException, InterruptedException{		
+		CompetitionSingleton s = (CompetitionSingleton) s1;
 		Class<? extends CompetitionManager> class1 = (Class<? extends CompetitionManager>) Class.forName("BackEvolution."+s.getType()+"."+s.getType()+"NetManager");
 		CompetitionManager netManager = class1.newInstance();
 		NeuralNetwork[] nns = s.getNetworks();
@@ -18,7 +20,47 @@ public class Competition {
 			currentPlayers[i] = i;
 		}
 		while(currentPlayers[0] <= s.getNumNetworks()-s.numCompeting()){
-			netManager.setupCompetition(currentPlayers);
+			netManager.setupCompetition();
+			Thread[] threads = new Thread[currentPlayers.length];
+			for(int i = 0; i<currentPlayers.length; i++){
+				NeuralNetwork nn = nns[currentPlayers[i]];
+				Thread thread = new Thread(){
+					public void run(){
+						try {
+							while(!netManager.getGameOver()) {
+								while(!netManager.isTurn(nn))
+								Backpropagate.BackIterationHandling(s);
+								NeuralNetManager.RunNetwork(nn,s);
+								NeuralNetwork[] back = {nn};
+								Backpropagate.backpropagate(back, s);
+							}
+						} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException
+								| IOException | ClassNotFoundException | SecurityException | InstantiationException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+				};
+				threads[i] = thread;
+			}
+			for(Thread thread: threads)thread.start();
+			for(Thread thread: threads)thread.join();
+			netManager.setEndCompetitionState();
+			incrementPlayers(currentPlayers.length-1, s);
+		}				
+	}
+	public static void evolutionRunner(CompetitionSingleton s) throws InstantiationException, IllegalAccessException, ClassNotFoundException, InterruptedException{		
+		@SuppressWarnings("unchecked")
+		Class<? extends CompetitionManager> class1 = (Class<? extends CompetitionManager>) Class.forName("BackEvolution."+s.getType()+"."+s.getType()+"NetManager");
+		@SuppressWarnings("deprecation")
+		CompetitionManager netManager = class1.newInstance();
+		NeuralNetwork[] nns = s.getNetworks();
+		int[] currentPlayers= new int[s.numCompeting()];
+		for(int i = 0; i< s.numCompeting(); i++){
+			currentPlayers[i] = i;
+		}
+		while(currentPlayers[0] <= s.getNumNetworks()-s.numCompeting()){
+			netManager.setupCompetition();
 			Thread[] threads = new Thread[currentPlayers.length];
 			for(int i = 0; i<currentPlayers.length; i++){
 				NeuralNetwork nn = nns[currentPlayers[i]];
@@ -35,13 +77,16 @@ public class Competition {
 				};
 				threads[i] = thread;
 			}
-			for(Thread thread: threads)thread.start();					
-			incrementPlayers(currentPlayers,currentPlayers.length-1, s);
+			for(Thread thread: threads)thread.start();
+			for(Thread thread: threads)thread.join(); 
+			netManager.setEndCompetitionState();
+			incrementPlayers(s.getCurrentPlayers().length-1, s);
 		}				
 	}
-	public static void incrementPlayers(int[] currentPlayers, int position, Singleton s) {
+	public static void incrementPlayers(int position, CompetitionSingleton s) {
+		int[] currentPlayers = s.getCurrentPlayers();
 		if(currentPlayers[position] == s.getNumNetworks()-(currentPlayers.length-position) && position !=0){	
-			incrementPlayers(currentPlayers,position-1,s);
+			incrementPlayers(position-1,s);
 			currentPlayers[position] = currentPlayers[position-1]+1;
 		}
 		else{

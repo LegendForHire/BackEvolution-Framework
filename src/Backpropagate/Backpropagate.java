@@ -4,6 +4,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.Random;
 
 import Competitive.Competition;
+import Competitive.CompetitionSingleton;
 import General.Gene;
 import General.Layer;
 import General.NeuralNetManager;
@@ -20,9 +21,11 @@ import General.Singleton;
 public class Backpropagate {
 	
 	public static Random rand = new Random();
-	public static void runner(Singleton s) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, IOException, ClassNotFoundException, SecurityException, InstantiationException {
+	public static void runner(Singleton s1) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, IOException, ClassNotFoundException, SecurityException, InstantiationException, InterruptedException {
+		BackpropagateSingleton s = (BackpropagateSingleton) s1;
 		@SuppressWarnings("unchecked")
 		Class<? extends BackpropagateManager> class1 = (Class<? extends BackpropagateManager>) Class.forName("BackEvolution."+s.getType()+"."+s.getType()+"NetManager");
+		@SuppressWarnings("deprecation")
 		BackpropagateManager netManager = class1.newInstance();
 		netManager.BackpropagationSetup();
 		System.out.println("Iteration " + s.getGen());
@@ -40,7 +43,7 @@ public class Backpropagate {
 		// this is where the back propagation learning step for the neural networks run. currently I have them set to run for one minute before evaluating
 		while(s.getTotalGlobalError() > s.getAllowedError()/scaling){
 			if(s.numCompeting() > 1){
-				Competition.runner(s);
+				Competition.backpropagationRunner((CompetitionSingleton) s);
 			}
 			else{
 				//set necessary values for backpropagation step
@@ -49,9 +52,10 @@ public class Backpropagate {
 				for (NeuralNetwork nn : nns){
 					NeuralNetManager.RunNetwork(nn,s);					
 				}
-			}
-			//Backpropagates error adjustments
-			backpropagate(nns,s);		
+				long t = System.currentTimeMillis();
+				while(System.currentTimeMillis() - t < s.getTiming())
+				backpropagate(nns,s);
+			}	
 			s.getWriter().println("Total Global Error:" + s.getTotalGlobalError()); 
 			s.getWriter().println("backpropagation complete");		
 		}
@@ -59,7 +63,8 @@ public class Backpropagate {
 	}
 
 	@SuppressWarnings("deprecation")
-	public static void backpropagate(NeuralNetwork[] nns, Singleton s) throws IOException, ClassNotFoundException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, SecurityException, InstantiationException {
+	public static void backpropagate(NeuralNetwork[] nns, Singleton s1) throws IOException, ClassNotFoundException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, SecurityException, InstantiationException {
+		BackpropagateSingleton s = (BackpropagateSingleton) s1;
 		// makes sure old error is reset
 		s.setTotalGlobalError(0.0);
 		@SuppressWarnings("unchecked")
@@ -128,6 +133,14 @@ public class Backpropagate {
 	//regularly used sigmoid function
 	public static double Sigmoid(double d) {
 		return 1/(1+Math.exp(d*-1));
+	}
+
+	public static void BackIterationHandling(Singleton s) throws InstantiationException, IllegalAccessException, ClassNotFoundException {
+		@SuppressWarnings("unchecked")
+		Class<? extends BackpropagateManager> class1 = (Class<? extends BackpropagateManager>) Class.forName("BackEvolution."+s.getType()+"."+s.getType()+"NetManager");
+		@SuppressWarnings("deprecation")
+		BackpropagateManager netManager = class1.newInstance();
+		netManager.BackIterationHandling();		
 	}
 	
 }
